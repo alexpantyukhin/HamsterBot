@@ -36,6 +36,41 @@ func getTradeHistoryByOrder(btceAPI btceapi.BtceAPI, orderID int, since time.Tim
 	return btceapi.Trade{}, false
 }
 
+func checkError(err error) {
+	if err != nil {
+		panic("ERROR: " + err.Error())
+	}
+}
+
+func trade(btceAPI btceapi.BtceAPI, pair string, enterBound, exitBound, startAmount float64) {
+	amount := startAmount
+	start := time.Now().UTC()
+	tradeAnswer, err := btceAPI.Trade(pair, "sell", enterBound, amount)
+	checkError(err)
+	orderID := tradeAnswer.OrderID
+	sell := false
+
+	for {
+		time.Sleep(time.Second)
+
+		tradeHistory, tradeFound := getTradeHistoryByOrder(btceAPI, orderID, start)
+		if tradeFound {
+			start = time.Unix(tradeHistory.Timestamp, 0)
+
+			if sell {
+				tradeAnswer, err = btceAPI.Trade(pair, "sell", enterBound, amount)
+			} else {
+				amount = tradeHistory.Amount * enterBound / exitBound
+				tradeAnswer, err = btceAPI.Trade(pair, "buy", exitBound, amount)
+			}
+
+			checkError(err)
+			orderID = tradeAnswer.OrderID
+			sell = !sell
+		}
+	}
+}
+
 func main() {
 	btceapi.ApiURL = "https://wex.nz"
 
@@ -80,26 +115,5 @@ func main() {
 		amount = firstCurrencyBalance
 	}
 
-	start := time.Now().UTC()
-	tradeAnswer, err := btceAPI.Trade(pair, "sell", enterBound, amount)
-	orderID := tradeAnswer.OrderID
-	sell := false
-
-	for {
-		time.Sleep(time.Second)
-
-		tradeHistory, tradeFound := getTradeHistoryByOrder(btceAPI, orderID, start)
-		if tradeFound {
-			start = time.Unix(tradeHistory.Timestamp, 0)
-
-			if sell {
-				tradeAnswer, err = btceAPI.Trade(pair, "sell", enterBound, amount)
-			} else {
-				tradeAnswer, err = btceAPI.Trade(pair, "buy", exitBound, amount)
-			}
-
-			orderID = tradeAnswer.OrderID
-			sell = !sell
-		}
-	}
+	trade(btceAPI, pair, enterBound, exitBound, amount)
 }
