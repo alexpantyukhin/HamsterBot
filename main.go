@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -42,11 +43,16 @@ func checkError(err error) {
 	}
 }
 
+func logMessage(str string) {
+	fmt.Printf("Info: " + str)
+}
+
 func trade(btceAPI btceapi.BtceAPI, pair string, enterBound, exitBound, startAmount float64) {
 	amount := startAmount
 	start := time.Now().UTC()
 	tradeAnswer, err := btceAPI.Trade(pair, "sell", enterBound, amount)
 	checkError(err)
+	logMessage(fmt.Sprintf("SELL order pair \"%s\", amount \"%f\", price \"%f\"", pair, amount, enterBound))
 	orderID := tradeAnswer.OrderID
 	sell := false
 
@@ -56,15 +62,22 @@ func trade(btceAPI btceapi.BtceAPI, pair string, enterBound, exitBound, startAmo
 		tradeHistory, tradeFound := getTradeHistoryByOrder(btceAPI, orderID, start)
 		if tradeFound {
 			start = time.Unix(tradeHistory.Timestamp, 0)
+			var tradeType string
+			var price float64
 
 			if sell {
 				tradeAnswer, err = btceAPI.Trade(pair, "sell", enterBound, amount)
+				tradeType = "SELL"
+				price = enterBound
 			} else {
 				amount = tradeHistory.Amount * enterBound / exitBound
 				tradeAnswer, err = btceAPI.Trade(pair, "buy", exitBound, amount)
+				tradeType = "BUY"
+				price = exitBound
 			}
 
 			checkError(err)
+			logMessage(fmt.Sprintf("%s order pair \"%s\", amount \"%f\", price \"%f\"", tradeType, pair, amount, price))
 			orderID = tradeAnswer.OrderID
 			sell = !sell
 		}
