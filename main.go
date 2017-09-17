@@ -21,7 +21,7 @@ func checkIntParameterFloatEmpty(flag string, value float64) {
 	}
 }
 
-func getTradeByOrder(btceAPI btceapi.BtceAPI, orderID int, since time.Time) (btceapi.Trade, bool) {
+func getTradeHistoryByOrder(btceAPI btceapi.BtceAPI, orderID int, since time.Time) (btceapi.Trade, bool) {
 	tradeHistory, err := btceAPI.GetTradeHistory(btceapi.FilterParams{Since: since, End: time.Now().UTC()})
 	if err != nil {
 		panic("Error: can't get trade history")
@@ -88,25 +88,18 @@ func main() {
 	for {
 		time.Sleep(time.Second)
 
-		if orderID != 0 {
-			orderList, orderErr := btceAPI.GetOrderList(btceapi.FilterParams{Since: start, End: time.Now().UTC()})
+		tradeHistory, tradeFound := getTradeHistoryByOrder(btceAPI, orderID, start)
+		if tradeFound {
+			start = time.Unix(tradeHistory.Timestamp, 0)
 
-			if orderErr != nil {
-				panic("Error: " + orderErr.Error())
+			if sell {
+				tradeAnswer, err = btceAPI.Trade(pair, "sell", enterBound, amount)
+			} else {
+				tradeAnswer, err = btceAPI.Trade(pair, "buy", exitBound, amount)
 			}
 
-			order, ok := orderList[strconv.Itoa(orderID)]
-			if ok && order.Status == 1 {
-
-				if sell {
-					tradeAnswer, err = btceAPI.Trade(pair, "sell", enterBound, amount)
-				} else {
-					tradeAnswer, err = btceAPI.Trade(pair, "buy", exitBound, amount)
-				}
-
-				orderID = tradeAnswer.OrderID
-				sell = !sell
-			}
+			orderID = tradeAnswer.OrderID
+			sell = !sell
 		}
 	}
 }
