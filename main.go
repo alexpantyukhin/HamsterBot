@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -12,14 +13,23 @@ import (
 
 func checkStringParameterNotEmpty(flag string, value string) {
 	if len(value) == 0 {
-		panic("ERROR:" + flag + "parameter can not be empty.")
+		showErrorAndExit(fmt.Sprintf("%s parameter can not be empty.", flag))
 	}
 }
 
-func checkIntParameterFloatEmpty(flag string, value float64) {
-	if value == 0 {
-		panic("ERROR:" + flag + "parameter can not be empty.")
+func showErrorAndExit(str string) {
+	fmt.Fprintf(os.Stderr, "ERROR: %s", str)
+	os.Exit(1)
+}
+
+func checkError(err error) {
+	if err != nil {
+		showErrorAndExit(fmt.Sprintf("%v\n", err))
 	}
+}
+
+func logMessage(str string) {
+	fmt.Printf("Info: " + str)
 }
 
 func getTradeHistoryByOrder(btceAPI btceapi.BtceAPI, orderID int, since time.Time) (btceapi.Trade, bool) {
@@ -35,16 +45,6 @@ func getTradeHistoryByOrder(btceAPI btceapi.BtceAPI, orderID int, since time.Tim
 	}
 
 	return btceapi.Trade{}, false
-}
-
-func checkError(err error) {
-	if err != nil {
-		panic("ERROR: " + err.Error())
-	}
-}
-
-func logMessage(str string) {
-	fmt.Printf("Info: " + str)
 }
 
 func trade(btceAPI btceapi.BtceAPI, pair string, enterBound, exitBound, startAmount float64) {
@@ -84,12 +84,21 @@ func trade(btceAPI btceapi.BtceAPI, pair string, enterBound, exitBound, startAmo
 	}
 }
 
-func main() {
-	btceapi.ApiURL = "https://wex.nz"
+var key string
+var secret string
+var pair string
+var enter float64
+var exit float64
+var amount float64
 
-	var key string
-	var secret string
-	var pair string
+func parseFloatOrPanic(val string, paramName string) float64 {
+	param, err := strconv.ParseFloat(val, 64)
+	checkError(err)
+
+	return param
+}
+
+func initAndCheckFlags() {
 	var enterBoundString string
 	var exitBoundString string
 	var amountString string
@@ -101,25 +110,35 @@ func main() {
 	flag.StringVar(&exitBoundString, "exit", "", "Price which you want to .")
 	flag.StringVar(&amountString, "amount", "", "Your amount")
 
-	//TODO: make normal checking of parameters.
+	flag.Parse()
+
 	checkStringParameterNotEmpty("key", key)
 	checkStringParameterNotEmpty("secret", secret)
 	checkStringParameterNotEmpty("pair", pair)
+	checkStringParameterNotEmpty("enter", enterBoundString)
+	checkStringParameterNotEmpty("exit", exitBoundString)
+	checkStringParameterNotEmpty("amount", amountString)
+
+	amount = parseFloatOrPanic(amountString, "amount")
+	enter = parseFloatOrPanic(enterBoundString, "enter")
+	exit = parseFloatOrPanic(exitBoundString, "exit")
+}
+
+func main() {
+	btceapi.ApiURL = "https://wex.nz"
+
+	initAndCheckFlags()
 
 	btceAPI := btceapi.BtceAPI{Key: key, Secret: secret}
 	info, err := btceAPI.GetInfo()
 
 	if err != nil {
-		panic("ERROR: Can not connect to exchange: " + err.Error())
+		showErrorAndExit("Can not connect to exchange: " + err.Error())
 	}
 
 	if info.Rights.Trade == 0 || info.Rights.Info == 0 {
-		panic("ERROR: not enough rights: ")
+		showErrorAndExit("Not enough rights for trading. Please update the key privileges.")
 	}
-
-	amount, _ := strconv.ParseFloat(amountString, 64)
-	enterBound, _ := strconv.ParseFloat(enterBoundString, 64)
-	exitBound, _ := strconv.ParseFloat(exitBoundString, 64)
 
 	firstCurrency := strings.Split(pair, "_")[0]
 	firstCurrencyBalance := info.Funds[firstCurrency]
@@ -128,5 +147,5 @@ func main() {
 		amount = firstCurrencyBalance
 	}
 
-	trade(btceAPI, pair, enterBound, exitBound, amount)
+	trade(btceAPI, pair, enter, exit, amount)
 }
